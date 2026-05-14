@@ -217,8 +217,10 @@ async function doFetch(){
   btn.innerHTML='<span class="spin">↻</span>';
   setLoading("市場データを取得中…");
 
-  // NK=F : CME円建て日経225先物（Yahoo Finance）
-  const syms=[...Object.keys(SECTORS),"^N225","NK=F","USDJPY=X"];
+  // NKD=F : CME Eミニ日経225先物（USD建て・インデックスポイント表示）
+  // ベーシス = (NKD=F − ^N225) / ^N225 × 100
+  // ※ NKD=FはNikkei指数値をそのままポイント表示するため、USD/JPY換算は不要
+  const syms=[...Object.keys(SECTORS),"^N225","NKD=F","USDJPY=X"];
   const results={};
   const batchSize=5;
   try{
@@ -233,14 +235,19 @@ async function doFetch(){
     Object.keys(SECTORS).forEach(t=>{usData[t]=results[t]?.chg||0;});
     const nkSpot   = results["^N225"]?.price;
     const nkChg    = results["^N225"]?.chg;
-    const nkFut    = results["NK=F"]?.price;
-    const nkFutChg = results["NK=F"]?.chg;
+    const nkFut    = results["NKD=F"]?.price;
+    const nkFutChg = results["NKD=F"]?.chg;
     const usdJpy   = results["USDJPY=X"]?.price;
 
     // ベーシス計算
+    // NKD=F はインデックスポイント建てで ^N225 と直接比較可能
+    // サニティチェック: スポットとの乖離が±15%超は失効コントラクトとみなし除外
     let basisPct = null;
-    if(nkSpot && nkFut && nkFut > 1000){
-      basisPct = ((nkFut - nkSpot) / nkSpot) * 100;
+    if(nkSpot && nkFut){
+      const ratio = nkFut / nkSpot;
+      if(ratio > 0.85 && ratio < 1.15){
+        basisPct = ((nkFut - nkSpot) / nkSpot) * 100;
+      }
     }
 
     const sigs   = calcSectorSigs(usData);
@@ -309,9 +316,9 @@ function nkCardHTML({nkSpot,nkChg,nkFut,nkFutChg,basisPct,nkScore,usdJpy,usAvg})
           <div style="font-size:9px;color:#9CA3AF;margin-top:2px">${f(nkChg,2,true)}%</div>
         </div>
         <div class="nk-pb">
-          <div class="nk-pl">先物 NK=F</div>
-          <div class="nk-pv ${hasFut?cc(nkFutChg||0):"gry"}">${hasFut?f(nkFut):"取得中"}<span class="nk-pu">${hasFut?"円":""}</span></div>
-          <div style="font-size:9px;color:#9CA3AF;margin-top:2px">${hasFut?f(nkFutChg,2,true)+"%":"CME円建"}</div>
+          <div class="nk-pl">先物 NKD=F</div>
+          <div class="nk-pv ${hasFut?cc(nkFutChg||0):"gry"}">${hasFut?f(nkFut):"取得中"}<span class="nk-pu">${hasFut?"pt":""}</span></div>
+          <div style="font-size:9px;color:#9CA3AF;margin-top:2px">${hasFut?f(nkFutChg,2,true)+"%":"CME Eミニ"}</div>
         </div>
         <div class="nk-pb">
           <div class="nk-pl">ベーシス</div>
@@ -355,7 +362,7 @@ function nkCardHTML({nkSpot,nkChg,nkFut,nkFutChg,basisPct,nkScore,usdJpy,usAvg})
       </div>`:""}
 
       ${!hasFut?`<div style="font-size:11px;color:#9CA3AF;margin-top:10px;line-height:1.7">
-        ※ NK=F（CME円建て先物）の取得に失敗しました。ベーシスは米国市場クローズ後の
+        ※ NKD=F（CME Eミニ日経先物）の取得またはサニティチェックに失敗しました（失効コントラクトの可能性）。ベーシスは米国市場クローズ後の
         <a href="https://www.jpx.co.jp/markets/derivatives/night-session/" target="_blank" style="color:#2563EB">大阪取引所夜間先物</a>でご確認ください。
       </div>`:""}
 
